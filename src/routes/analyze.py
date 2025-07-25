@@ -29,11 +29,19 @@ router = APIRouter(
 # 包含YouTube路由
 router.include_router(youtube_router)
 
+# 获取客户端真实IP地址
+def get_client_ip(request: Request) -> str:
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    if x_forwarded_for:
+        # 取第一个IP（最原始的客户端IP）
+        return x_forwarded_for.split(",")[0].strip()
+    return request.client.host
+
 # 无前缀的POST端点
 @router.post("")
 async def process_analyze(params: AnalyzeParams,request: Request):
-    # 打印ip地址和请求参数
-    logger.info(f"ip地址: {request.client.host}, 请求参数: {params}")
+    client_ip = get_client_ip(request)
+    logger.info(f"ip地址: {client_ip}, 请求参数: {params}")
     try:
         url = params.url
         app_type = ""
