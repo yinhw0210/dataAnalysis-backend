@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from src.app.kuaishou.index import Kuaishou
 from src.app.douyin.index import Douyin
@@ -31,8 +31,9 @@ router.include_router(youtube_router)
 
 # 无前缀的POST端点
 @router.post("")
-async def process_analyze(params: AnalyzeParams):
-    utils_logger.info(f"处理URL (POST): {params.url}")
+async def process_analyze(params: AnalyzeParams,request: Request):
+    # 打印ip地址和请求参数
+    logger.info(f"ip地址: {request.client.host}, 请求参数: {params}")
     try:
         url = params.url
         app_type = ""
