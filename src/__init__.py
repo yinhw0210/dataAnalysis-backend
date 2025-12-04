@@ -5,5 +5,6 @@ from .app.xiaohongshu.image import Image
 from .app.kuaishou.index import Kuaishou
 from .app.test.index import Test
 from .app.weibo.index import Weibo
+from .crawlers.base_crawler import BaseCrawler
 
-__all__ = ["Xiaohongshu", "Image", "Douyin", "Kuaishou", "Test", "Weibo"]
+__all__ = ["Xiaohongshu", "Image", "Douyin", "Kuaishou", "Test", "Weibo", "BaseCrawler"]

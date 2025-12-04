@@ -1,5 +1,6 @@
 import re
 from typing import Optional
+import datetime
 from .logger import get_utils_logger
 
 __all__ = ["find_url"]
@@ -41,3 +42,26 @@ def find_url(string: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"提取 URL 时出错: {str(e)}", exc_info=True)
         return None
+
+
+def get_timestamp(unit: str = "milli"):
+    """
+    根据给定的单位获取当前时间 (Get the current time based on the given unit)
+
+    Args:
+        unit (str): 时间单位，可以是 "milli"、"sec"、"min" 等
+            (The time unit, which can be "milli", "sec", "min", etc.)
+
+    Returns:
+        int: 根据给定单位的当前时间 (The current time based on the given unit)
+    """
+
+    now = datetime.datetime.utcnow() - datetime.datetime(1970, 1, 1)
+    if unit == "milli":
+        return int(now.total_seconds() * 1000)
+    elif unit == "sec":
+        return int(now.total_seconds())
+    elif unit == "min":
+        return int(now.total_seconds() / 60)
+    else:
+        raise ValueError("Unsupported time unit")

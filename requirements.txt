@@ -22,3 +22,4 @@ Pillow
 gradio
 yt_dlp>=2023.10.13
 huggingface_hub>=0.20.0
+PyYAML==6.0.1

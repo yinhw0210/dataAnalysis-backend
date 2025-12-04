@@ -58,6 +58,7 @@ async def process_analyze(params: AnalyzeParams):
         elif app_type == 'douyin':
             from src.app.douyin.index import Douyin
             douyin = Douyin(url, params.type)
+            await douyin.initialize()
             return douyin.to_dict()
         elif app_type == 'kuaishou':
             from src.app.kuaishou.index import Kuaishou
@@ -117,11 +118,12 @@ async def process_douyin(params: AnalyzeParams):
     logger.info(f"处理抖音URL (POST): {params.url}")
     try:
         douyin = Douyin(params.url, params.type)
-        
+        await douyin.initialize()
+
         if params.format.lower() == "html":
             # 返回 HTML 内容
             from src.utils.response import Response
-            return Response.success(douyin.html, "获取成功")
+            return Response.success("HTML格式暂不支持", "获取成功")
         else:
             # 返回结构化数据
             return douyin.to_dict()
