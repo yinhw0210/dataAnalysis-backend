@@ -5,8 +5,6 @@ from .logger import (
     get_test_logger,
     get_global_logger,
     get_analyze_logger,
-    get_tracking_logger,
-    get_db_logger,
     get_inpainting_logger
 )
 from .config import config, get_environment, EnvType
@@ -15,8 +13,6 @@ __all__ = [
     "find_url", 
     "get_app_logger",
     "get_utils_logger",
-    "get_tracking_logger",
-    "get_db_logger",
     "get_test_logger",
     "get_global_logger",
     "get_analyze_logger",

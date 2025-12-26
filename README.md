@@ -1,6 +1,6 @@
 # 多媒体内容分析与处理 API
 
-一个基于 FastAPI 的综合性多媒体内容分析与处理 API 服务，支持社交媒体内容解析、证件照处理、图像修复、YouTube视频下载、用户行为埋点等功能。
+一个基于 FastAPI 的综合性多媒体内容分析与处理 API 服务，支持社交媒体内容解析、证件照处理、图像修复、YouTube视频下载等功能。
 
 基于FastAPI的社交媒体数据分析API服务，支持从小红书、抖音、快手、微博等平台提取和分析数据。
 
@@ -18,7 +18,6 @@
 - **Web框架**：FastAPI
 - **服务器**：Uvicorn
 - **数据解析**：BeautifulSoup4、lxml、Selenium
-- **数据库**：MySQL (通过PyMySQL和DBUtils)
 - **HTTP客户端**：Requests、httpx
 - **数据处理**：Pandas
 
@@ -31,7 +30,6 @@
 ├── deploy.sh            # 生产环境部署脚本
 ├── run_dev.sh           # 开发环境启动脚本
 ├── requirements.txt     # 依赖列表
-├── config.template.ini  # 配置文件模板
 ├── logs/               # 日志目录
 ├── hivision/           # 证件照处理模块
 ├── model/              # AI模型存储目录
@@ -92,32 +90,6 @@ curl -X 'POST' \
 - **development**: 开发环境（默认）
 - **production**: 生产环境
 
-## 📊 数据库配置
-
-### 配置文件说明
-
-项目使用 `config.ini` 进行数据库配置：
-
-- 开发环境：配置文件位于项目根目录
-- 生产环境：配置文件位于项目父目录（部署时会自动复制到项目目录）
-
-配置文件格式：
-```ini
-[mysql]
-host = localhost
-port = 3306
-user = your_username
-password = your_password
-database = your_database
-```
-
-### 数据库连接池
-
-项目使用 PyMySQL 和 DBUtils 实现数据库连接池，特性包括：
-- 自动管理连接池大小
-- 支持连接自动回收
-- 支持连接健康检查
-
 ## 📦 安装和部署
 
 ### 开发环境
@@ -141,12 +113,6 @@ source .venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 
-4. 配置数据库：
-```bash
-cp config.template.ini config.ini
-# 编辑 config.ini 填入正确的数据库配置
-```
-
 5. 启动开发服务器：
 ```bash
 # 使用默认配置启动
@@ -161,16 +127,13 @@ python main.py
 
 ### 生产环境
 
-1. 在项目父目录创建并配置 `config.ini`
-
-2. 运行部署脚本：
+1. 运行部署脚本：
 ```bash
 chmod +x deploy.sh
 ./deploy.sh [port] [host]  # 端口和主机地址可选，默认为 8000 和 0.0.0.0
 ```
 
 部署脚本会自动：
-- 复制父目录的配置文件到项目目录
 - 创建/激活虚拟环境
 - 更新代码（git pull）
 - 安装/更新依赖
@@ -220,12 +183,7 @@ chmod +x deploy.sh
 - **流式传输**: 大文件流式下载，节省内存
 - **质量选择**: 支持 best、worst 或指定分辨率
 
-### 5. 用户行为埋点
-- **事件追踪**: 记录用户行为数据
-- **多平台支持**: 支持 PC、移动端、小程序等平台
-- **数据查询**: 提供埋点数据查询接口
-
-### 6. 系统工具
+### 5. 系统工具
 - **文件代理**: 提供文件流代理服务
 - **图片代理**: 解决跨域图片访问问题
 - **健康检查**: 系统状态监控
@@ -257,10 +215,6 @@ chmod +x deploy.sh
 
 ### YouTube 下载接口 (`/analyze/youtube`)
 - `GET /analyze/youtube` - YouTube 视频下载
-
-### 用户埋点接口 (`/tracking`)
-- `POST /tracking/event` - 记录埋点事件
-- `GET /tracking/events` - 查询埋点数据
 
 ### 系统工具接口 (`/system`)
 - `POST /system/get_file_stream` - 文件流代理
@@ -325,7 +279,6 @@ curl "http://localhost:8000/analyze/youtube?url=https://www.youtube.com/watch?v=
 
 ### 高性能架构
 - **异步处理**: 基于 FastAPI 的异步架构
-- **连接池**: 数据库连接池管理
 - **流式传输**: 大文件流式处理
 - **缓存优化**: 模型缓存和资源复用
 
@@ -346,24 +299,13 @@ curl "http://localhost:8000/analyze/youtube?url=https://www.youtube.com/watch?v=
 
 ### 常见问题及解决方案
 
-#### 1. 配置文件问题
-- 确保开发环境下 `config.ini` 在项目根目录
-- 确保生产环境下 `config.ini` 在项目父目录
-- 检查配置文件格式是否正确
-
-#### 2. 数据库连接问题
-- 检查配置文件中的数据库信息是否正确
-- 确保数据库服务正在运行
-- 检查数据库用户权限
-- 验证网络连接是否正常
-
-#### 3. 服务启动问题
+#### 1. 服务启动问题
 - 检查端口是否被占用：`lsof -i :8000`
 - 查看日志文件：`logs/app_*.log`、`logs/system_*.log`
 - 确保所有依赖都已正确安装：`pip install -r requirements.txt`
 - 检查 Python 版本兼容性
 
-#### 4. AI 模型相关问题
+#### 2. AI 模型相关问题
 - **图像修复模型加载失败**：
   - 检查 `model/lama/big-lama.pt` 是否存在
   - 确保有足够的磁盘空间和内存
@@ -374,7 +316,7 @@ curl "http://localhost:8000/analyze/youtube?url=https://www.youtube.com/watch?v=
   - 检查图像中是否包含清晰的人脸
   - 验证 base64 编码是否正确
 
-#### 5. 社交媒体解析问题
+#### 3. 社交媒体解析问题
 - **链接解析失败**：
   - 确认链接格式正确且可访问
   - 检查网络连接是否正常
@@ -385,7 +327,7 @@ curl "http://localhost:8000/analyze/youtube?url=https://www.youtube.com/watch?v=
   - 尝试更新 User-Agent 配置
   - 检查是否需要代理访问
 
-#### 6. YouTube 下载问题
+#### 4. YouTube 下载问题
 - 确保安装了 `yt-dlp`：`pip install yt-dlp`
 - 检查 YouTube 链接是否有效
 - 验证网络连接和代理设置 
@@ -462,7 +404,6 @@ src/
 ├── services/          # 业务逻辑层
 └── utils/             # 工具函数
     ├── config.py      # 配置管理
-    ├── db.py          # 数据库连接
     ├── logger.py      # 日志配置
     └── response.py    # 响应格式
 ```

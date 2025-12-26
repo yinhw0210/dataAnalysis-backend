@@ -34,10 +34,6 @@ app = FastAPI(
     # 添加路由分组的标签描述
     openapi_tags=[
         {
-            "name": "tracking",
-            "description": "用户行为埋点接口",
-        },
-        {
             "name": "system",
             "description": "系统接口",
         },
@@ -91,8 +87,8 @@ async def health_check():
     return {"status": "健康", "环境": current_env}
     
 # 注册所有路由模块
-from src.routes import db_register_routes
-db_register_routes(app)
+from src.routes import register_routes
+register_routes(app)
 
 # 注册所有 controller 模块
 from src.controllers.index import register_controllers
