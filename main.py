@@ -34,6 +34,10 @@ app = FastAPI(
     # 添加路由分组的标签描述
     openapi_tags=[
         {
+            "name": "doubao",
+            "description": "豆包去水印接口 - 提取豆包AI生成图片的无水印原图",
+        },
+        {
             "name": "system",
             "description": "系统接口",
         },

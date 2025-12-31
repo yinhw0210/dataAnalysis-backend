@@ -1,0 +1,252 @@
+"""
+豆包分享链接原图提取器
+使用 Playwright 无头浏览器提取无水印原图
+"""
+
+import os
+import re
+import base64
+import asyncio
+from typing import List, Dict, Optional
+from playwright.async_api import async_playwright, Browser, Page
+
+from src.utils import get_app_logger
+
+logger = get_app_logger()
+
+# 项目根目录
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+DOWNLOAD_DIR = os.path.join(ROOT_DIR, 'storage', 'doubao_downloads')
+
+
+class DoubaoExtractor:
+    """豆包图片提取器 - 使用 Playwright"""
+    
+    def __init__(self):
+        self.browser: Optional[Browser] = None
+        self.playwright = None
+    
+    async def _setup_browser(self):
+        """配置并启动浏览器"""
+        if self.browser:
+            return
+        
+        self.playwright = await async_playwright().start()
+        self.browser = await self.playwright.chromium.launch(
+            headless=True,
+            args=[
+                '--disable-gpu',
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-setuid-sandbox',
+            ]
+        )
+    
+    async def extract_images(self, share_url: str) -> Dict:
+        """
+        从分享链接提取原图信息
+        
+        Args:
+            share_url: 豆包分享链接
+            
+        Returns:
+            包含图片信息的字典
+        """
+        logger.info(f"[Doubao] 开始提取: {share_url}")
+        
+        try:
+            await self._setup_browser()
+            
+            context = await self.browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            )
+            page = await context.new_page()
+            
+            await page.goto(share_url, wait_until='networkidle', timeout=30000)
+            await page.wait_for_timeout(3000)  # 额外等待动态内容加载
+            
+            html = await page.content()
+            logger.info(f"[Doubao] 页面长度: {len(html)}")
+            
+            # 提取图片
+            images = self._extract_images_from_html(html)
+            
+            await context.close()
+            
+            return {
+                'success': True,
+                'url': share_url,
+                'image_count': len(images),
+                'images': images
+            }
+            
+        except Exception as e:
+            logger.error(f"[Doubao] 提取失败: {e}")
+            return {
+                'success': False,
+                'url': share_url,
+                'error': str(e),
+                'images': []
+            }
+    
+    def _extract_images_from_html(self, html: str) -> List[Dict]:
+        """从 HTML 中提取图片信息"""
+        images = []
+        seen_ids = set()
+        
+        # 预处理 HTML
+        normalized = html.replace('\\u002F', '/').replace('\\u0026', '&')
+        normalized = normalized.replace('\\\\u002F', '/').replace('\\\\u0026', '&')
+        
+        # 匹配 image_ori_raw URL
+        pattern = r'image_ori_raw.*?url.*?"(https[^"]+image_raw[^"]+)"'
+        matches = re.findall(pattern, normalized)
+        
+        for url in matches:
+            # 清理 URL
+            url = self._decode_url(url)
+            
+            # 提取图片 ID
+            id_match = re.search(r'rc_gen_image/([a-f0-9]{32})', url)
+            image_id = id_match.group(1) if id_match else None
+            
+            # 去重
+            if image_id and image_id in seen_ids:
+                continue
+            if image_id:
+                seen_ids.add(image_id)
+            
+            images.append({
+                'id': image_id or f'image_{len(images)}',
+                'original_url': url,
+                'width': 2048,
+                'height': 2048,
+            })
+        
+        # 提取提示词
+        self._extract_prompts(normalized, images)
+        
+        logger.info(f"[Doubao] 提取到 {len(images)} 张图片")
+        return images
+    
+    def _extract_prompts(self, html: str, images: List[Dict]):
+        """提取图片的生成提示词"""
+        for img in images:
+            if not img['id']:
+                continue
+            pattern = rf'{img["id"]}.*?prompt.*?"([^"]+)"'
+            match = re.search(pattern, html, re.DOTALL)
+            if match:
+                prompt = match.group(1)
+                prompt = prompt.replace('\\n', '\n').replace('\\u002F', '/')
+                img['prompt'] = prompt[:500]
+    
+    def _decode_url(self, url: str) -> str:
+        """解码 URL"""
+        if not url:
+            return ''
+        while '\\\\' in url:
+            url = url.replace('\\\\', '\\')
+        url = url.replace('\\u002F', '/')
+        url = url.replace('\\u0026', '&')
+        url = url.replace('\\/', '/')
+        url = url.replace('\\&', '&')
+        url = url.rstrip('\\')
+        return url
+    
+    async def download_image(self, url: str) -> Optional[bytes]:
+        """
+        下载图片并返回二进制数据
+        
+        Args:
+            url: 图片 URL
+            
+        Returns:
+            图片二进制数据，失败返回 None
+        """
+        try:
+            await self._setup_browser()
+            
+            context = await self.browser.new_context()
+            page = await context.new_page()
+            
+            # 使用 JavaScript fetch 下载图片
+            result = await page.evaluate('''async (url) => {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    const blob = await response.blob();
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = () => reject('FileReader error');
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    return 'ERROR:' + e.message;
+                }
+            }''', url)
+            
+            await context.close()
+            
+            if result and not str(result).startswith('ERROR:'):
+                if ',' in result:
+                    base64_data = result.split(',')[1]
+                    return base64.b64decode(base64_data)
+            
+            logger.error(f"[Doubao] 下载失败: {result}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"[Doubao] 下载异常: {e}")
+            return None
+    
+    async def close(self):
+        """关闭浏览器"""
+        if self.browser:
+            await self.browser.close()
+            self.browser = None
+        if self.playwright:
+            await self.playwright.stop()
+            self.playwright = None
+
+
+# 全局提取器实例（复用浏览器连接）
+_extractor: Optional[DoubaoExtractor] = None
+
+
+async def get_extractor() -> DoubaoExtractor:
+    """获取全局提取器实例"""
+    global _extractor
+    if _extractor is None:
+        _extractor = DoubaoExtractor()
+    return _extractor
+
+
+async def extract_doubao_images(share_url: str) -> Dict:
+    """
+    提取豆包分享链接中的无水印原图
+    
+    Args:
+        share_url: 豆包分享链接
+        
+    Returns:
+        包含图片信息的字典
+    """
+    extractor = await get_extractor()
+    return await extractor.extract_images(share_url)
+
+
+async def download_doubao_image(url: str) -> Optional[bytes]:
+    """
+    下载豆包图片
+    
+    Args:
+        url: 图片 URL
+        
+    Returns:
+        图片二进制数据
+    """
+    extractor = await get_extractor()
+    return await extractor.download_image(url)
