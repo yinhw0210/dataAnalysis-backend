@@ -1,14 +1,12 @@
 """
 豆包分享链接原图提取器
-使用 Playwright 无头浏览器提取无水印原图
+使用 curl_cffi 模拟浏览器请求提取无水印原图
 """
 
 import os
 import re
-import base64
-import asyncio
 from typing import List, Dict, Optional
-from playwright.async_api import async_playwright, Browser, Page
+from curl_cffi import requests
 
 from src.utils import get_app_logger
 
@@ -20,27 +18,16 @@ DOWNLOAD_DIR = os.path.join(ROOT_DIR, 'storage', 'doubao_downloads')
 
 
 class DoubaoExtractor:
-    """豆包图片提取器 - 使用 Playwright"""
+    """豆包图片提取器 - 使用 curl_cffi"""
     
     def __init__(self):
-        self.browser: Optional[Browser] = None
-        self.playwright = None
+        self.session = None
     
-    async def _setup_browser(self):
-        """配置并启动浏览器"""
-        if self.browser:
-            return
-        
-        self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(
-            headless=True,
-            args=[
-                '--disable-gpu',
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-setuid-sandbox',
-            ]
-        )
+    def _get_session(self):
+        """获取请求会话"""
+        if self.session is None:
+            self.session = requests.Session(impersonate="chrome")
+        return self.session
     
     async def extract_images(self, share_url: str) -> Dict:
         """
@@ -55,24 +42,26 @@ class DoubaoExtractor:
         logger.info(f"[Doubao] 开始提取: {share_url}")
         
         try:
-            await self._setup_browser()
+            session = self._get_session()
             
-            context = await self.browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            )
-            page = await context.new_page()
+            # 设置请求头
+            headers = {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+                'Referer': 'https://www.doubao.com/',
+            }
             
-            await page.goto(share_url, wait_until='networkidle', timeout=30000)
-            await page.wait_for_timeout(3000)  # 额外等待动态内容加载
+            # 发送请求
+            response = session.get(share_url, headers=headers, timeout=30)
+            response.raise_for_status()
             
-            html = await page.content()
+            html = response.text
             logger.info(f"[Doubao] 页面长度: {len(html)}")
             
             # 提取图片
             images = self._extract_images_from_html(html)
-            
-            await context.close()
             
             return {
                 'success': True,
@@ -166,53 +155,32 @@ class DoubaoExtractor:
             图片二进制数据，失败返回 None
         """
         try:
-            await self._setup_browser()
+            session = self._get_session()
             
-            context = await self.browser.new_context()
-            page = await context.new_page()
+            headers = {
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Referer': 'https://www.doubao.com/',
+            }
             
-            # 使用 JavaScript fetch 下载图片
-            result = await page.evaluate('''async (url) => {
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    const blob = await response.blob();
-                    return new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.onerror = () => reject('FileReader error');
-                        reader.readAsDataURL(blob);
-                    });
-                } catch (e) {
-                    return 'ERROR:' + e.message;
-                }
-            }''', url)
+            response = session.get(url, headers=headers, timeout=60)
+            response.raise_for_status()
             
-            await context.close()
-            
-            if result and not str(result).startswith('ERROR:'):
-                if ',' in result:
-                    base64_data = result.split(',')[1]
-                    return base64.b64decode(base64_data)
-            
-            logger.error(f"[Doubao] 下载失败: {result}")
-            return None
+            logger.info(f"[Doubao] 下载成功: {len(response.content)} bytes")
+            return response.content
             
         except Exception as e:
             logger.error(f"[Doubao] 下载异常: {e}")
             return None
     
-    async def close(self):
-        """关闭浏览器"""
-        if self.browser:
-            await self.browser.close()
-            self.browser = None
-        if self.playwright:
-            await self.playwright.stop()
-            self.playwright = None
+    def close(self):
+        """关闭会话"""
+        if self.session:
+            self.session.close()
+            self.session = None
 
 
-# 全局提取器实例（复用浏览器连接）
+# 全局提取器实例
 _extractor: Optional[DoubaoExtractor] = None
 
 
