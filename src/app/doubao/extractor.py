@@ -81,9 +81,6 @@ class DoubaoExtractor:
     
     def _extract_images_from_html(self, html: str) -> List[Dict]:
         """从 HTML 中提取图片信息"""
-        images = []
-        seen_ids = set()
-        
         # 预处理 HTML - 处理多层转义
         normalized = html
         # 处理多层 Unicode 转义
@@ -93,35 +90,64 @@ class DoubaoExtractor:
             normalized = normalized.replace('\\/', '/')
             normalized = normalized.replace('&amp;', '&')
         
-        # 只匹配 rc_gen_image 路径的原图 URL (排除头像等其他图片)
-        pattern = r'(https://[^"\']+?/rc_gen_image/([a-f0-9]{32})\.jpeg~tplv-a9rns2rl98-image_raw_b\.png[^"\']*?)'
-        matches = re.findall(pattern, normalized)
+        # 查找所有包含 rc_gen_image 的 URL
+        all_urls = re.findall(r'https://[^"\'\\]+rc_gen_image/[^"\'\\]+', normalized)
+        logger.info(f"[Doubao] 找到 {len(all_urls)} 个 rc_gen_image URL")
         
-        logger.info(f"[Doubao] 找到 {len(matches)} 个原图 URL")
+        # 使用字典去重，优先保留原图 URL
+        image_data = {}
         
-        for url, image_id in matches:
-            # 去重
-            if image_id in seen_ids:
-                continue
-            seen_ids.add(image_id)
-            
+        for url in all_urls:
             # 清理 URL
-            url = self._decode_url(url)
+            url = url.replace('\\/', '/').replace('\\\\', '')
             
+            # 提取图片 ID
+            id_match = re.search(r'rc_gen_image/([a-f0-9]{32})', url)
+            if not id_match:
+                continue
+            
+            image_id = id_match.group(1)
+            
+            # 检查是否是原图 URL（包含 image_raw）
+            if 'image_raw' in url:
+                # 清理 URL 中的 HTML 实体
+                url = self._decode_url(url)
+                image_data[image_id] = {
+                    'id': image_id,
+                    'original_url': url,
+                    'type': 'original'
+                }
+            # 如果是带水印的 URL，尝试转换为原图 URL
+            elif 'watermark' in url and image_id not in image_data:
+                # 替换为原图参数
+                orig_url = re.sub(r'~tplv-a9rns2rl98-downsize_watermark_\d+_\d+_b\.png', 
+                                 '~tplv-a9rns2rl98-image_raw_b.png', url)
+                orig_url = self._decode_url(orig_url)
+                image_data[image_id] = {
+                    'id': image_id,
+                    'original_url': orig_url,
+                    'type': 'converted'
+                }
+        
+        logger.info(f"[Doubao] 去重后有 {len(image_data)} 张图片")
+        
+        # 转换为列表并添加尺寸信息
+        images = []
+        for img_id, img_info in image_data.items():
             # 提取尺寸信息
             width = 2730
             height = 1535
             
             # 尝试从 HTML 中提取实际尺寸
-            size_pattern = rf'{image_id}[^}}]*?width[^:]*?:\s*(\d+)[^}}]*?height[^:]*?:\s*(\d+)'
+            size_pattern = rf'{img_id}[^}}]*?width[^:]*?:\s*(\d+)[^}}]*?height[^:]*?:\s*(\d+)'
             size_match = re.search(size_pattern, normalized)
             if size_match:
                 width = int(size_match.group(1))
                 height = int(size_match.group(2))
             
             images.append({
-                'id': image_id,
-                'original_url': url,
+                'id': img_info['id'],
+                'original_url': img_info['original_url'],
                 'width': width,
                 'height': height,
             })
