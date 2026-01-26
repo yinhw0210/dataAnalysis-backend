@@ -84,33 +84,46 @@ class DoubaoExtractor:
         images = []
         seen_ids = set()
         
-        # 预处理 HTML
-        normalized = html.replace('\\u002F', '/').replace('\\u0026', '&')
-        normalized = normalized.replace('\\\\u002F', '/').replace('\\\\u0026', '&')
+        # 预处理 HTML - 处理多层转义
+        normalized = html
+        # 处理多层 Unicode 转义
+        for _ in range(3):
+            normalized = normalized.replace('\\u002F', '/').replace('\\u0026', '&')
+            normalized = normalized.replace('\\\\u002F', '/').replace('\\\\u0026', '&')
+            normalized = normalized.replace('\\/', '/')
+            normalized = normalized.replace('&amp;', '&')
         
-        # 匹配 image_ori_raw URL
-        pattern = r'image_ori_raw.*?url.*?"(https[^"]+image_raw[^"]+)"'
+        # 只匹配 rc_gen_image 路径的原图 URL (排除头像等其他图片)
+        pattern = r'(https://[^"\']+?/rc_gen_image/([a-f0-9]{32})\.jpeg~tplv-a9rns2rl98-image_raw_b\.png[^"\']*?)'
         matches = re.findall(pattern, normalized)
         
-        for url in matches:
+        logger.info(f"[Doubao] 找到 {len(matches)} 个原图 URL")
+        
+        for url, image_id in matches:
+            # 去重
+            if image_id in seen_ids:
+                continue
+            seen_ids.add(image_id)
+            
             # 清理 URL
             url = self._decode_url(url)
             
-            # 提取图片 ID
-            id_match = re.search(r'rc_gen_image/([a-f0-9]{32})', url)
-            image_id = id_match.group(1) if id_match else None
+            # 提取尺寸信息
+            width = 2730
+            height = 1535
             
-            # 去重
-            if image_id and image_id in seen_ids:
-                continue
-            if image_id:
-                seen_ids.add(image_id)
+            # 尝试从 HTML 中提取实际尺寸
+            size_pattern = rf'{image_id}[^}}]*?width[^:]*?:\s*(\d+)[^}}]*?height[^:]*?:\s*(\d+)'
+            size_match = re.search(size_pattern, normalized)
+            if size_match:
+                width = int(size_match.group(1))
+                height = int(size_match.group(2))
             
             images.append({
-                'id': image_id or f'image_{len(images)}',
+                'id': image_id,
                 'original_url': url,
-                'width': 2048,
-                'height': 2048,
+                'width': width,
+                'height': height,
             })
         
         # 提取提示词
@@ -124,12 +137,19 @@ class DoubaoExtractor:
         for img in images:
             if not img['id']:
                 continue
-            pattern = rf'{img["id"]}.*?prompt.*?"([^"]+)"'
+            
+            # 查找 gen_params 中的 prompt
+            pattern = rf'{img["id"]}[^}}]*?gen_params[^}}]*?prompt[^:]*?:\s*["\']([^"\']+?)["\']'
             match = re.search(pattern, html, re.DOTALL)
+            
             if match:
                 prompt = match.group(1)
-                prompt = prompt.replace('\\n', '\n').replace('\\u002F', '/')
-                img['prompt'] = prompt[:500]
+                # 清理转义字符
+                prompt = prompt.replace('\\n', '\n')
+                prompt = prompt.replace('\\u002F', '/')
+                prompt = prompt.replace('&quot;', '"')
+                prompt = prompt.replace('&amp;', '&')
+                img['prompt'] = prompt[:500]  # 限制长度
     
     def _decode_url(self, url: str) -> str:
         """解码 URL"""

@@ -31,6 +31,7 @@ app = FastAPI(
     version=config.API_VERSION,
     debug=config.DEBUG,
     openapi_version="3.0.2",  # 设置OpenAPI版本
+    redirect_slashes=False,  # 禁用自动斜杠重定向，避免308错误
     # 添加路由分组的标签描述
     openapi_tags=[
         {
